@@ -1,561 +1,525 @@
 # PatchWise
-Evidence-Based CVE Upgrade Advisor for Scala and Angular
+AI-Enabled evidence-Based CVE Upgrade Advisor
 
-<img width="1280" height="720" alt="patchwise_github_banner_1280" src="https://github.com/user-attachments/assets/3a5c118a-8a57-4cb4-9bbc-fdc1f995b03d" />
+> Deterministic tools decide the facts. AI only explains. A human signs off.
+
+**Overview**
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {
+  "fontFamily": "Inter, Segoe UI, Arial",
+  "primaryColor": "#eef7f7",
+  "primaryBorderColor": "#0f8b8d",
+  "primaryTextColor": "#12343b",
+  "lineColor": "#0f8b8d",
+  "tertiaryColor": "#ffffff"
+}}}%%
+
+flowchart LR
+    A["1<br/><b>SBOM</b><br/><code>combined-sbom.json</code>"]
+    B["2<br/><b>Scan + triage</b><br/><code>trivy-results.json</code>"]
+    C["3<br/><b>Feasibility</b><br/><code>feasibility.json</code>"]
+    D["4<br/><b>Evidence</b><br/><code>evidence.json</code>"]
+    E["5<br/><b>AI report</b><br/><code>ai-report.json</code>"]
+    F["6<br/><b>Approve</b><br/><code>approval.json</code>"]
+    G["7<br/><b>PR</b><br/><code>pull-request</code>"]
+
+    A --> B --> C --> D --> E --> F --> G
+
+    classDef deterministic fill:#eef7f7,stroke:#0f8b8d,stroke-width:2px,color:#12343b;
+    classDef ai fill:#fff4ef,stroke:#e25d34,stroke-width:2px,color:#12343b;
+    classDef human fill:#f0faf3,stroke:#38a169,stroke-width:2px,color:#12343b;
+
+    class A,B,C,D,G deterministic;
+    class E ai;
+    class F human;
+```
 
 
-A deterministic, evidence-first pipeline where SBOM, Trivy, constraints, resolvers, build/test output, and human approval provide the facts. Internal LLM writes only controlled explanations.
 
-Design principle
-Deterministic tools decide facts. AI explains verified evidence only.
+**Flow:** 
+```mermaid
 
-Contents
-Section	Purpose
-1. Pipeline overview	End-to-end jobs and artifacts
-2. Job 1 — Generate combined SBOM	Resolved dependency inventory
-3. Job 2 — Trivy scan + triage	Vulnerabilities, fixed versions, suppression ledger
-4. Job 3 — Feasibility engine	Constraints, upgrade groups, strict resolution, build/test
-5. Job 4 — Evidence enrichment	Changelog/release-note signals with provenance
-6. Job 5 — AI report generation	Internal LLM with schema and rule guardrails
-7. Job 6 — Human approval gate	Approve/reject/manual strategy
-8. Job 7 — Optional upgrade PR creation	Apply approved patches and open PR
-9. Artifact summary	Inputs/outputs by job
+%%{init: {"theme": "base", "themeVariables": {
+  "fontFamily": "Inter, Segoe UI, Arial",
+  "primaryTextColor": "#12343b",
+  "lineColor": "#64748b",
+  "clusterBkg": "#ffffff",
+  "clusterBorder": "#e2e8f0"
+}}}%%
 
-Changes in this revision (v2)
-•	Suppression ledger added: Job 2 applies .trivyignore / .trivyignore.yaml so accepted findings do not re-enter feasibility on every run.
-•	Constraints enforced in feasibility: pins, allowed ranges, upgrade-together groups, and required tests feed Job 3, not only Job 4.
-•	Upgrade-together groups: grouped packages such as Jackson modules are tested as a single candidate set.
-•	Strict resolution: Job 3 fails loudly on dependency conflicts and verifies that the candidate version actually resolved and was not silently evicted.
-•	Supporting fixes: explicit SBOM merge commands, conservative classification ladder, risk-signal provenance, and mandatory patch output for feasible items.
+flowchart TD
 
-Important v2 behavior
-Feasibility now tests the change you would actually ship: constraints and upgrade groups are applied before resolver/build/test checks.
+    %% Main input
+    INPUT_REPO["<b>Project source</b><br/><code>build.sbt</code><br/><code>package.json</code><br/><code>package-lock.json</code>"]
 
-Components and responsibilities
-Component	Responsibility
-SBOM	Inventory: dependencies present and their resolved versions.
-Trivy + suppression ledger	Security scan and triage: vulnerabilities, fixed versions, and accepted findings.
-Constraints file	Team-maintained pins, allowed ranges, upgrade-together groups, required tests, and owners.
-Feasibility engine	Technical proof: strict resolve, build, and tests with the fixed candidate set.
-Evidence enrichment	Release-note and changelog signals with source provenance and confidence.
-Rules engine	Deterministic classification before the LLM writes anything.
-Internal LLM LLM	Readable report writing only; no fact discovery or classification changes.
-Human approval	Final approve/reject/manual strategy decision.
+    %% Job 1
+    J1["<b>1. Generate SBOM</b><br/>Create one combined dependency inventory"]
+    A1["<b>combined-sbom.json</b><br/>Resolved backend + frontend dependencies"]
 
-1. Pipeline overview
-Job 1: Generate combined SBOM
-  -> Job 2: Trivy scan + suppression triage
-  -> Job 3: Feasibility engine (constraints/group-aware, strict resolution)
-  -> Job 4: Evidence enrichment
-  -> Job 5: AI report generation (internal LLM)
-  -> Job 6: Human approval gate
-  -> Job 7: Optional upgrade PR creation
+    %% Job 2
+    TRIAGE["<b>.trivyignore</b><br/>Accepted-risk ledger"]
+    J2["<b>2. Scan + triage</b><br/>Find CVEs and fixed versions"]
+    A2["<b>trivy-results.json</b><br/>Active CVEs to analyze"]
+    S2["<b>suppressed.json</b><br/>Accepted / unreachable findings"]
 
-Job	Question answered	Primary output
-Job 1	What dependencies are present?	combined-sbom.json
-Job 2	Which dependencies are vulnerable, and which findings are accepted?	trivy-results.json, suppressed.json
-Job 3	Can the fixed version/group resolve, build, and test without breaking constraints?	feasibility.json, patches/, logs/
-Job 4	What release evidence affects risk, and how confident are we?	evidence-bundle.json
-Job 5	How should a human understand the upgrade strategy?	ai-report.json, ai-report.md
-Job 6	Did a human approve the plan?	approval-result.json
-Job 7	Can approved changes be prepared as a PR?	pull-request-result.json
+    %% Job 3
+    CONSTRAINTS["<b>constraints.yaml</b><br/>Pins · ranges · groups · tests"]
+    J3["<b>3. Feasibility</b><br/>Strict resolve, build, and test"]
+    A3["<b>feasibility.json</b><br/>Feasible, blocked, or failed upgrades"]
+    P3["<b>patches/ + logs/</b><br/>Generated patches and proof logs"]
 
-Traceability model
-Inventory, detection, feasibility, evidence, explanation, and approval are separate so every recommendation can be traced to a tool or a human decision.
+    %% Job 4
+    J4["<b>4. Evidence enrichment</b><br/>Collect changelog and release-note signals"]
+    A4["<b>evidence-bundle.json</b><br/>Risk signals with provenance"]
 
-2. Job 1 — Generate combined SBOM
-Purpose
-Create one resolved dependency inventory covering backend and frontend. This job answers what is present; it does not decide what is vulnerable.
+    %% Job 5
+    J5["<b>5. AI report</b><br/>Local LLM explains evidence only"]
+    A5["<b>ai-report.json / ai-report.md</b><br/>Human-readable upgrade strategy"]
 
-Input example
-repo/
-  build.sbt
-  project/plugins.sbt        # addSbtPlugin("com.github.sbt" % "sbt-sbom" % "0.5.0")
-  project/Dependencies.scala
-  backend/src/...
-  frontend/package.json
-  frontend/package-lock.json
+    %% Job 6
+    J6["<b>6. Human approval</b><br/>Approve, reject, or request manual strategy"]
+    A6["<b>approval-result.json</b><br/>Approved items and manual-review items"]
 
-Processing
-# 1) Backend (Scala) -> CycloneDX BOM
-sbt makeBom
+    %% Job 7
+    J7["<b>7. Optional PR creation</b><br/>Apply approved patches and open PR"]
+    A7["<b>pull-request-result.json</b><br/>Created PR or final PR status"]
 
-# 2) Frontend (Angular) -> CycloneDX BOM from package-lock.json
-cd frontend
-npx --yes @cyclonedx/cyclonedx-npm@latest   --output-format JSON   --output-file frontend-sbom.json
-cd ..
+    %% Main flow: output becomes next input
+    INPUT_REPO --> J1 --> A1 --> J2 --> A2 --> J3 --> A3 --> J4 --> A4 --> J5 --> A5 --> J6 --> A6 --> J7 --> A7
 
-# 3) Merge into one SBOM
-cyclonedx-cli merge   --input-files target/<name>-<version>.bom.xml frontend/frontend-sbom.json   --output-file combined-sbom.json   --output-format json
+    %% Extra inputs and side outputs
+    TRIAGE -.-> J2
+    J2 -.-> S2
 
-Output example
+    CONSTRAINTS -.-> J3
+    INPUT_REPO -.-> J3
+    J3 -.-> P3
+
+    A2 -.-> J5
+    A3 -.-> J5
+
+    P3 -.-> J6
+    P3 -.-> J7
+
+    %% Styling
+    classDef input fill:#f8fafc,stroke:#94a3b8,color:#334155,stroke-width:1.5px;
+    classDef artifact fill:#ffffff,stroke:#64748b,color:#334155,stroke-width:1.5px;
+    classDef deterministic fill:#0f8b8d,stroke:#0b6f71,color:#ffffff,stroke-width:2.5px;
+    classDef ai fill:#e25d34,stroke:#b84622,color:#ffffff,stroke-width:2.5px;
+    classDef human fill:#2f855a,stroke:#276749,color:#ffffff,stroke-width:2.5px;
+    classDef side fill:#fffaf0,stroke:#d69e2e,color:#334155,stroke-width:1.5px;
+
+    class INPUT_REPO,TRIAGE,CONSTRAINTS input;
+    class A1,A2,A3,A4,A5,A6,A7 artifact;
+    class J1,J2,J3,J4,J7 deterministic;
+    class J5 ai;
+    class J6 human;
+    class S2,P3 side;
+
+
+```
+### Legend
+
+| Color  | Meaning                  |
+| ------ | ------------------------ |
+| Teal   | Deterministic tool stage |
+| Orange | AI-grounded explanation  |
+| Green  | Human approval           |
+| Grey   | Input/configuration      |
+
+
+
+
+
+---
+
+## 1. The Problem
+
+### Upgrading for CVEs is slow, risky, and blocked by pins
+
+#### Polyglot sprawl
+Two ecosystems, many libraries — Kafka, Play, Akka, Solr — each on its own release cadence and resolver.
+
+#### Pinned versions
+Certain versions must stay put because something depends on them. A naive bump breaks the build.
+
+#### Manual triage does not scale
+Every CVE means hours of cross-checking:
+
+- Does a fix exist?
+- Does it resolve?
+- Is it even reachable?
+
+**The cost today:** Security finds the CVE, engineering spends days proving an upgrade is safe, and pins make every case bespoke.
+
+---
+
+## 2. What does PatchWise provide?
+
+### A pipeline that proves the safe upgrade path
+
+For every CVE, the system answers one question deterministically:
+
+> Can we upgrade safely given our pins, and if not, why?
+
+| Step | Name | Purpose |
+|---:|---|---|
+| 1 | Detect | Inventory + CVE scan |
+| 2 | Prove | Feasibility under pins |
+| 3 | Explain | AI-written report |
+| 4 | Approve | Human signs off |
+
+**Guarantee:** Facts come from tools, never the model. The AI writes the explanation; it cannot invent a CVE, choose a version, or override a pin.
+
+
+---
+
+## 3. The Safety Model
+
+### AI never produces facts — only judgments over facts
+
+Everything that must be correct comes from deterministic tools:
+
+- Which CVEs apply
+- Which versions exist
+- Whether the dependency graph still resolves
+
+The model sits in the middle. Even a hallucinated suggestion cannot reach production because it has to pass a real resolver and the test suite first.
+
+```text
+Deterministic fact layer
+SBOM · CVE scan · strict resolver
+
+AI reasoning, grounded
+Explains and sequences — never decides facts
+
+Deterministic validation
+Re-resolve · build · tests
+```
+
+| Layer | Role |
+|---|---|
+| Deterministic fact layer | Ground truth |
+| AI reasoning | Grounded advisory only |
+| Deterministic validation | Verifies proposed changes |
+
+
+---
+
+## 4. Architecture
+
+
+
+```text
+Repo
+ ├─ Scala/sbt project
+ ├─ Angular/package-lock.json
+ │
+CI job 1: Inventory
+ ├─ sbt makeBom
+ ├─ collect package-lock.json
+ │
+CI job 2: Vulnerability scan
+ ├─ trivy sbom scala-bom.json → trivy-scala.json
+ ├─ trivy fs/package-lock scan → trivy-angular.json
+ │
+CI job 3: Feasibility engine
+ ├─ read Trivy fixed versions
+ ├─ read internal Constraints
+ ├─ generate candidate bumps
+ ├─ run sbt/coursier resolution
+ ├─ run npm dry-run / lockfile validation
+ ├─ produce feasibility.json
+ │
+CI job 4: Evidence enrichment
+ ├─ fetch changelog/release notes
+ ├─ optional: dependency tree explanation
+ ├─ produce evidence bundle
+ │
+CI job 5: AI report
+ ├─ LLM reads only evidence bundle
+ ├─ emits schema-valid report.json + markdown
+ │
+CI approval gate
+ └─ human approves, rejects, or requests manual strategy
+```
+
+| Job | Type | Output |
+|---:|---|---|
+| 1 | Deterministic | `combined-sbom.json` |
+| 2 | Deterministic | `trivy-results.json` |
+| 3 | Deterministic | `feasibility.json` |
+| 4 | Deterministic evidence collection | `evidence.json` |
+| 5 | AI, grounded | `ai-report.json`, `ai-report.md` |
+| 6 | Human | `approval.json` |
+| 7 | Automation | Pull request |
+
+**Why the separation matters:** Detection, feasibility, evidence, explanation, and approval are distinct stages. Every recommendation is traceable to the exact tool output that produced it.
+
+
+
+---
+
+## 5. Job 1 — Inventory
+
+### One SBOM across both stacks
+
+```text
+build.sbt       -> sbt-sbom
+package-lock    -> cyclonedx-npm
+                 -> cyclonedx-cli merge
+                 -> combined-sbom.json
+```
+
+Pins live in `build.sbt` / `package.json`, not in the SBOM. The SBOM records resolved versions only.
+
+### Example: `combined-sbom.json`
+
+```json
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
   "components": [
     {
-      "type": "library",
-      "group": "com.fasterxml.jackson.core",
       "name": "jackson-databind",
       "version": "2.13.5",
-      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.13.5"
+      "purl": "pkg:maven/.../jackson-databind@2.13.5"
     },
     {
-      "type": "library",
       "name": "axios",
       "version": "1.5.0",
       "purl": "pkg:npm/axios@1.5.0"
     }
   ]
 }
+```
 
-Output meaning
-The SBOM records resolved versions only. Pins and upgrade policies live in the constraints file and are enforced later in Job 3.
 
-3. Job 2 — Trivy scan + suppression triage
-Purpose
-Scan the combined SBOM for CVEs and apply the accepted-risk ledger. Installed versions come from the SBOM; fixed versions come from Trivy vulnerability data.
 
-Processing
-trivy sbom combined-sbom.json   --ignorefile .trivyignore   --format json   --output trivy-results.json
+---
 
-Suppression ledger examples
-Simple .trivyignore
-# .trivyignore
-# Findings triaged and accepted with a reason and review date.
-# Risk acceptance, not silent mute.
+## 6. Job 2 — Detect
 
-# CVE-2023-6378 - logback DoS, receiver component not deployed.
-# Re-review by 2026-12-31.
-CVE-2023-6378 exp:2026-12-31
+### Scan the SBOM, then triage what is accepted
 
-Package-scoped YAML suppression
-# .trivyignore.yaml
-vulnerabilities:
-  - id: CVE-2023-6378
-    purls:
-      - "pkg:maven/ch.qos.logback/logback-classic"
-    statement: "Receiver component not deployed; not reachable."
-    expired_at: 2026-12-31
+```text
+combined-sbom.json
+    -> Trivy matches CVEs + fixed versions
+    -> .trivyignore accepted-risk ledger
+    -> trivy-results.json
+```
 
-Output example
+Accepted or unreachable findings are suppressed with a reason and review date so they do not re-enter the pipeline.
+
+### Example: `trivy-results.json`
+
+```json
 {
-  "Results": [
+  "Vulnerabilities": [
     {
-      "Target": "combined-sbom.json",
-      "Vulnerabilities": [
-        {
-          "VulnerabilityID": "CVE-2024-1111",
-          "PkgName": "com.fasterxml.jackson.core:jackson-databind",
-          "InstalledVersion": "2.13.5",
-          "FixedVersion": "2.15.4",
-          "Severity": "HIGH"
-        },
-        {
-          "VulnerabilityID": "CVE-2024-2222",
-          "PkgName": "axios",
-          "InstalledVersion": "1.5.0",
-          "FixedVersion": "1.6.8",
-          "Severity": "HIGH"
-        }
-      ]
+      "VulnerabilityID": "CVE-2025-27817",
+      "PkgName": "org.apache.kafka:kafka-clients",
+      "InstalledVersion": "3.4.0",
+      "FixedVersion": "3.9.1",
+      "Severity": "HIGH"
     }
   ]
 }
+```
 
-Output meaning
-Trivy identifies vulnerable versions and fixed versions. It does not prove the project can move to those versions; Job 3 does that.
 
-4. Job 3 — Feasibility engine
-Purpose
-Prove whether fixed versions can technically work in this project. Job 3 reads team constraints, tests upgrade-together groups as one change, respects pins, and uses strict resolution so silent evictions cannot hide failed upgrades.
 
-Core principle
-Trivy:       this package is fixed in version X.
-Constraints: these packages move together; these versions are pinned; these tests are required.
-Job 3:       build the real candidate set in a temp copy, resolve strictly,
-             verify X actually resolved, then build and test.
+---
 
-Constraints file example
-# cve-advisor-constraints.yaml
-pins:
-  - package: "com.typesafe.akka:akka-actor-typed_2.13"
-    version: "2.6.20"
-    reason: "Last Apache-2.0 licensed Akka; do not move to BSL 2.7+."
+## 7. Job 3 — Feasibility: The Heart
 
-allowedRanges:
-  - package: "org.apache.kafka:kafka-clients"
-    range: ">=3.4.0 <4.0.0"
+### Prove the fix resolves, builds, and tests under our pins
 
-upgradeTogether:
-  - name: "jackson-family"
-    packages:
-      - "com.fasterxml.jackson.core:jackson-core"
-      - "com.fasterxml.jackson.core:jackson-databind"
-      - "com.fasterxml.jackson.core:jackson-annotations"
-    reason: "Jackson modules must stay version-aligned."
+Job 3 is the technical core and the answer to the pin problem.
 
-requiredTests:
-  - package: "com.fasterxml.jackson.core:jackson-databind"
-    tests: ["sbt -batch testOnly *Json*"]
-    reason: "Serialization/deserialization risk."
+It uses the package managers' own resolvers as oracles:
 
-manualReview:
-  - package: "com.example:internal-lib_2.13"
-    reason: "No public changelog; always route to a human."
+1. Pick the fixed version.
+2. Respect upgrade-together groups, such as the Jackson family.
+3. Resolve strictly.
+4. Respect pins.
+5. Fail loudly on conflicts.
+6. Verify the candidate actually resolved and was not silently evicted.
+7. Build and test.
 
-Processing steps
-1. Read trivy-results.json and cve-advisor-constraints.yaml.
-2. Build candidate sets: group CVEs by package, choose the highest fixed version, and expand upgrade-together groups.
-3. Enforce allowed ranges and pins. If a candidate requires moving a pin, mark blocked-by-pin and do not override it.
-4. Create a temporary workspace for each candidate set; never touch the real branch.
-5. Apply the change: direct dependency becomes a version patch; transitive dependency becomes a temporary override only if policy allows it.
-6. Resolve strictly and verify that the candidate version actually resolved.
-7. Compare dependency graphs before/after to identify shared/common dependency impact.
-8. Build and run required tests for the affected packages or groups.
-9. Record status, logs, resolved-version checks, dependency graph impact, and a mandatory patch file for feasible items.
+### Possible outcomes
 
-Scala strict resolution + verification
-# Fail loudly on conflicts. Do not let resolver silently choose a winner.
-coursier resolve --strict <full dependency set including candidate + existing pins>
+- `feasible`
+- `feasible-with-override`
+- `blocked-by-pin`
+- `blocked-by-resolution`
+- `build-failed`
+- `test-failed`
+- `needs-human-review`
 
-# sbt configuration used by the feasibility workspace:
-ThisBuild / conflictManager := ConflictManager.strict
-ThisBuild / updateOptions  := updateOptions.value.withCachedResolution(false)
+### Example: `feasibility.json`
 
-sbt -batch clean update compile
-sbt -batch evicted
-
-# Rule: if the candidate was evicted back to an older version,
-# status = blocked-by-resolution, even if update/compile exited green.
-
-Angular/npm strict resolution
-# ERESOLVE on peer/version conflict = blocked-by-resolution.
-# Do not pass --force or --legacy-peer-deps.
-npm install --package-lock-only --ignore-scripts
-
-# Clean install + Angular build:
-npm ci --ignore-scripts
-npm run build
-
-# Required tests, if configured:
-npm test -- --watch=false
-
-Dependency graph impact example
-{
-  "dependencyGraphImpact": {
-    "directDependencyChanged": false,
-    "transitiveDependenciesChanged": [
-      {
-        "package": "com.fasterxml.jackson.core:jackson-databind",
-        "from": "2.13.5",
-        "to": "2.15.4",
-        "affectedParents": [
-          "com.typesafe.play:play-json_2.13:2.9.2",
-          "com.company:kafka-client-wrapper_2.13:1.0.0"
-        ],
-        "impactType": "shared-common-dependency"
-      }
-    ],
-    "evictionsOrOverrides": [
-      {
-        "package": "com.fasterxml.jackson.core:jackson-databind",
-        "selectedVersion": "2.15.4",
-        "evictedVersions": ["2.13.5"]
-      }
-    ]
-  }
-}
-
-Output example
-{
-  "runId": "2026-06-21-001",
-  "source": "trivy-results.json",
-  "constraints": "cve-advisor-constraints.yaml",
-  "summary": { "candidateSets": 4, "feasible": 1, "feasibleWithOverride": 1, "blocked": 2 },
-  "results": [
-    {
-      "id": "scala-grp-jackson",
-      "ecosystem": "scala",
-      "group": "jackson-family",
-      "packages": [
-        "com.fasterxml.jackson.core:jackson-core",
-        "com.fasterxml.jackson.core:jackson-databind",
-        "com.fasterxml.jackson.core:jackson-annotations"
-      ],
-      "cves": ["CVE-2024-1111"],
-      "candidateVersions": {
-        "jackson-core": "2.15.4",
-        "jackson-databind": "2.15.4",
-        "jackson-annotations": "2.15.4"
-      },
-      "changeType": "temporary-dependencyOverride (group)",
-      "status": "feasible-with-override",
-      "resolutionCheck": "all three resolved at 2.15.4; none evicted",
-      "commandsRun": [
-        "coursier resolve --strict ...",
-        "sbt -batch clean update compile",
-        "sbt -batch evicted",
-        "sbt -batch testOnly *Json*"
-      ],
-      "dependencyGraphImpact": {
-        "impactType": "shared-common-dependency",
-        "affectedParents": ["play-json_2.13", "kafka-client-wrapper_2.13"]
-      },
-      "patchFile": "patches/scala-jackson-2.15.4.patch",
-      "logFile": "logs/scala-jackson-2.15.4.log"
-    },
-    {
-      "id": "npm-axios",
-      "ecosystem": "npm",
-      "package": "axios",
-      "cves": ["CVE-2024-2222"],
-      "currentVersion": "1.5.0",
-      "candidateVersion": "1.6.8",
-      "changeType": "direct-package-json-bump",
-      "status": "feasible",
-      "resolutionCheck": "no ERESOLVE; axios@1.6.8 in lockfile",
-      "commandsRun": [
-        "npm install --package-lock-only --ignore-scripts",
-        "npm ci --ignore-scripts",
-        "npm run build"
-      ],
-      "patchFile": "patches/npm-axios-1.6.8.patch",
-      "logFile": "logs/npm-axios-1.6.8.log"
-    },
-    {
-      "id": "npm-nth-check",
-      "ecosystem": "npm",
-      "package": "nth-check",
-      "cves": ["CVE-2021-3803"],
-      "currentVersion": "1.0.2",
-      "candidateVersion": "2.0.1",
-      "changeType": "temporary-npm-override",
-      "status": "blocked-by-resolution",
-      "resolutionCheck": "npm install failed with ERESOLVE; parent constrains nth-check <2",
-      "commandsRun": ["npm install --package-lock-only --ignore-scripts"],
-      "logFile": "logs/npm-nth-check-2.0.1.log"
-    },
-    {
-      "id": "scala-akka-stream",
-      "ecosystem": "scala",
-      "package": "com.typesafe.akka:akka-stream_2.13",
-      "cves": ["CVE-EXAMPLE-AKKA"],
-      "currentVersion": "2.6.20",
-      "candidateVersion": "2.7.0",
-      "changeType": "blocked",
-      "status": "blocked-by-pin",
-      "resolutionCheck": "candidate conflicts with pin akka 2.6.20; pin not overridden",
-      "blockingPin": "com.typesafe.akka:akka-actor-typed_2.13@2.6.20",
-      "logFile": "logs/scala-akka-stream-2.7.0.log"
-    }
-  ]
-}
-
-5. Job 4 — Evidence enrichment
-Purpose
-Add release/changelog context that helps a human judge risk. Constraints are already enforced in Job 3; Job 4 adds evidence and confidence and must not decide technical feasibility.
-
-Provenance rule
-Every risk signal must carry a source and matched text. If no reliable evidence is found, say so explicitly.
-
-Processing steps
-1. Read feasibility.json.
-2. For each feasible or feasible-with-override item, locate release notes or CHANGELOG for the version range.
-3. Extract risk signals such as security-fix, migration-note, deprecated-api, behavior-change, runtime-requirement.
-4. Attach provenance: source file/URL, version range, and matched text.
-5. Assign evidence confidence: high, medium, low, or none.
-6. Record limitations when evidence is missing or unstructured.
-
-Output example — evidence found
-{
-  "id": "scala-grp-jackson",
-  "package": "com.fasterxml.jackson.core:jackson-databind",
-  "ecosystem": "scala",
-  "currentVersion": "2.13.5",
-  "candidateVersion": "2.15.4",
-  "feasibilityStatus": "feasible-with-override",
-  "versionChangeType": "minor",
-  "releaseEvidence": {
-    "status": "found",
-    "sourceType": "CHANGELOG.md",
-    "confidence": "medium",
-    "coveredRange": ">2.13.5 <=2.15.4"
-  },
-  "riskSignals": [
-    {
-      "type": "security-fix",
-      "confidence": "medium",
-      "source": "release-notes/VERSION-2.x",
-      "matchedText": "Fix potential DoS in ...",
-      "summary": "Security fix referenced in release notes."
-    },
-    {
-      "type": "migration-note",
-      "confidence": "high",
-      "source": "CHANGELOG.md#2.15.0",
-      "matchedText": "Custom serializers may need ...",
-      "summary": "Custom serializers should run regression tests."
-    }
-  ],
-  "limitations": ["Release notes are partly unstructured; not all behavior changes may be documented."],
-  "recommendedReportHint": "needs-testing"
-}
-
-Output example — no changelog found
-{
-  "id": "scala-internal-lib",
-  "package": "com.example:internal-lib_2.13",
-  "currentVersion": "1.4.2",
-  "candidateVersion": "1.4.9",
-  "releaseEvidence": { "status": "not-found", "confidence": "none" },
-  "riskSignals": [],
-  "limitations": [
-    "Package repository could not be identified.",
-    "Breaking-change risk cannot be assessed from release notes."
-  ],
-  "recommendedReportHint": "needs-human-review"
-}
-
-6. Job 5 — AI report generation with internal LLM
-Purpose
-Turn structured evidence into a readable strategy report. The LLM does not discover facts, choose versions, or change classification.
-
-Safety design
-•	Send compact evidence JSON, never the full repo or raw logs.
-•	Rules engine sets classificationFromRules before the model runs; the model must echo it and cannot change it.
-•	Force JSON output and validate against a strict schema.
-•	Require evidenceRefs that point to real input fields for every recommendation.
-•	Reject output mentioning any package, version, CVE, command, or evidence reference not present in the input.
-•	Render final Markdown using your own template; the model supplies only reason and recommendedAction prose.
-
-Rule-based classification ladder
-Evaluate all conditions; the most conservative outcome wins.
-
-IF no fixed version:                          needs-human-review
-ELSE IF blocked by pin:                       blocked-by-pin
-ELSE IF blocked by allowed-range/policy:      blocked-by-policy
-ELSE IF strict resolver rejected:             blocked-by-resolution
-ELSE IF resolved version != candidate:        blocked-by-resolution
-ELSE IF build failed:                         build-failed
-ELSE IF required tests failed:                test-failed
-ELSE IF required tests not run:               needs-testing
-ELSE IF changelog confidence = none:          needs-human-review
-ELSE IF breaking-change signals (high conf):  breaking
-ELSE IF breaking-change signals:              needs-testing
-ELSE IF major version bump:                   needs-testing
-ELSE IF feasible-with-override:               needs-testing
-ELSE IF shared dependency impact detected:    needs-testing
-ELSE IF feasible + build passed + required tests passed + patch/minor bump:
-                                                 safe-to-upgrade
-ELSE:                                         needs-human-review
-
-Prompt rules
-You are given structured evidence for dependency upgrade candidates.
-Use only the supplied JSON. Do not invent CVEs, versions, packages, changelog
-facts, commands, blockers, or test results. Do not change classificationFromRules;
-echo it. Every recommendation must include evidenceRefs pointing to fields in the
-input. If evidence is insufficient, return needs-human-review. Return JSON only,
-following the provided schema.
-
-Output example
+```json
 {
   "summary": {
-    "totalItems": 4,
-    "safeToUpgrade": 1,
-    "needsTesting": 1,
-    "blocked": 2,
-    "needsHumanReview": 0
+    "feasible": 1,
+    "blocked": 2
   },
-  "recommendations": [
+  "results": [
     {
       "id": "npm-axios",
+      "candidateVersion": "1.6.8",
+      "status": "feasible",
+      "resolutionCheck": "axios@1.6.8 in lockfile"
+    },
+    {
+      "id": "scala-akka-stream",
+      "candidateVersion": "2.7.0",
+      "status": "blocked-by-pin",
+      "blockingPin": "akka-actor-typed@2.6.20"
+    }
+  ]
+}
+```
+
+
+---
+
+## 8. Jobs 4 and 5 — Evidence, Then Explanation
+
+### Context with provenance; the LLM only writes
+
+#### Job 4: Evidence enrichment
+
+Changelog and release-note signals are collected with:
+
+- Source
+- Exact matched text
+- Confidence level
+
+No source means no signal.
+
+#### Job 5: AI report with internal Mistral
+
+The AI writes the readable report only.
+
+Rules set the classification; the model cannot change it.
+
+Output is allow-listed. Unknown CVEs, versions, packages, or evidence references are rejected.
+
+### Example: `ai-report.json`
+
+```json
+{
+  "recommendations": [
+    {
       "package": "axios",
       "classification": "safe-to-upgrade",
-      "priority": 1,
-      "reason": "Clean npm install and Angular build passed; no breaking-change signal in the collected evidence.",
-      "recommendedAction": "Apply the package.json bump and commit the updated package-lock.json.",
+      "reason": "clean install + build passed; no breaking-change signal",
       "evidenceRefs": [
-        "npm-axios.feasibility.status",
-        "npm-axios.releaseEvidence.riskSignals"
+        "npm-axios.feasibility.status"
       ]
     },
     {
-      "id": "scala-grp-jackson",
       "package": "jackson-family",
       "classification": "needs-testing",
-      "priority": 2,
-      "reason": "Group resolves with overrides and builds, but policy and a migration note require serialization regression tests.",
-      "recommendedAction": "Apply the Jackson group override in one PR and run JSON serialization tests.",
       "evidenceRefs": [
-        "scala-grp-jackson.feasibility.status",
-        "scala-grp-jackson.policyContext.requiredTests",
-        "scala-grp-jackson.releaseEvidence.riskSignals"
+        "scala-grp-jackson.policyContext.requiredTests"
       ]
     }
   ]
 }
+```
 
-7. Job 6 — Human approval gate
-Purpose
-No automatic application until a human approves. Approval is item-level or group-level; an upgradeTogether group is approved as one unit.
-•	Reviewer checks CVE severity, fixed version, resolution/build/test result, evidence confidence, constraints, AI explanation, and patch output.
-•	Reviewer approves, rejects, or routes to manual strategy.
-•	Approved items carry the patch produced in Job 3.
 
-Output example
+
+---
+
+## 9. Jobs 6 and 7 — Approval and PR
+
+### A human decides; only then is a PR prepared
+
+The reviewer sees:
+
+- Severity
+- Feasibility result
+- Tests
+- Constraints
+- Evidence confidence
+- AI explanation
+
+Approval is per item or per upgrade group.
+
+Blocked items route to a human strategy instead of being forced through.
+
+### Example: `approval-result.json`
+
+```json
 {
   "approvalStatus": "partially-approved",
-  "approvedBy": "security-reviewer",
-  "approvedItems": ["npm-axios", "scala-grp-jackson"],
-  "rejectedItems": [],
+  "approvedItems": [
+    "npm-axios",
+    "scala-grp-jackson"
+  ],
   "manualReviewItems": [
     {
-      "id": "npm-nth-check",
-      "reason": "blocked-by-resolution; parent dependency needs a separate upgrade strategy."
-    },
-    {
       "id": "scala-akka-stream",
-      "reason": "blocked-by-pin; requires a decision on the Akka 2.6.20 pin."
+      "reason": "blocked-by-pin; decide on Akka 2.6.20"
     }
   ]
 }
+```
 
-8. Job 7 — Optional upgrade PR creation
-Purpose
-Prepare approved changes as a pull request. This is optional for MVP but useful after the pipeline is trusted.
-1. Create a fresh branch.
-2. Apply each approved Job 3 patch.
-3. Re-run strict resolution, build, and required tests on the PR branch.
-4. Open the PR with the AI report section and evidence attached.
-5. Exclude blocked or manual-review items.
 
-Output example
-{
-  "pullRequestCreated": true,
-  "branch": "security/cve-upgrade-2026-06-21",
-  "includedItems": ["npm-axios", "scala-grp-jackson"],
-  "excludedItems": [
-    {
-      "id": "npm-nth-check",
-      "reason": "blocked-by-resolution"
-    },
-    {
-      "id": "scala-akka-stream",
-      "reason": "blocked-by-pin"
-    }
-  ]
-}
 
-9. Artifact summary
-Job	Inputs	Outputs
-Job 1	Repo dependency files; package-lock.json; sbt project	combined-sbom.json
-Job 2	combined-sbom.json; .trivyignore/.trivyignore.yaml	trivy-results.json; suppressed.json
-Job 3	trivy-results.json; constraints file; repo source	feasibility.json; patches/; logs/
-Job 4	feasibility.json; release/changelog sources	evidence-bundle.json
-Job 5	trivy-results.json; feasibility.json; evidence-bundle.json; rule classifications	ai-report.json; ai-report.md
-Job 6	AI report; feasibility evidence; patches	approval-result.json
-Job 7	approval result; patches	pull-request-result.json
+---
 
-Final responsibility split
-SBOM inventories. Trivy detects. Constraints express project policy. Job 3 proves technical feasibility. Job 4 adds evidence. Rules classify. LLM explains. Humans approve.
+## 10. Why It Will Not Hallucinate
+
+### Six guardrails keep the AI inside the lines
+
+| Guardrail | Explanation |
+|---|---|
+| Facts from tools | CVEs and fixed versions come from Trivy / OSV, never the model. |
+| Resolver as oracle | Feasibility is proven by the real resolver, strictly, not estimated. |
+| Rules set the verdict | A deterministic rules engine classifies before the LLM writes. |
+| Allow-listed output | Unknown CVEs, versions, or packages in the output are rejected. |
+| Everything is cited | Every recommendation points to the evidence that backs it. |
+| Human approves | Nothing ships without a person signing off. |
+
+
+---
+
+## 11. Scope
+
+### A bounded MVP, with a clear path beyond
+
+#### In scope — MVP
+
+- Seven-job pipeline, end to end
+- Scala / sbt + Angular / npm on one pilot repo
+- Pins, allowed ranges, and upgrade-together groups
+- Human approval gate
+- PR creation optional
+
+#### Later — deliberately out
+
+- Reachability analysis to reduce CVE noise further
+- Multi-repo / org-wide rollout
+- Auto-merge of low-risk patches
+- Own-code SAST, image scanning, and secret scanning
+
+### Tooling
+
+| Tool | Purpose |
+|---|---|
+| CycloneDX | SBOM |
+| Trivy | Scan |
+| coursier / npm | Resolve |
+| Internal Mistral | Report |
+| GitHub/GitLab CI | Gate |
+
+
+---
+
