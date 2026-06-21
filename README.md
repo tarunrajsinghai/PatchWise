@@ -1,5 +1,6 @@
 # PatchWise
 Evidence-Based CVE Upgrade Advisor for Scala and Angular
+
 <img width="1280" height="720" alt="patchwise_github_banner_1280" src="https://github.com/user-attachments/assets/3a5c118a-8a57-4cb4-9bbc-fdc1f995b03d" />
 
 
