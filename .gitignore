@@ -1,0 +1,93 @@
+# Combined .gitignore for Python, Go, and Node
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+.python-version
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+build/
+dist/
+*.egg
+*.egg-info/
+.eggs/
+
+# PyInstaller
+/dist/
+/*.manifest
+/*.spec
+
+# VS Code settings
+.vscode/
+
+# Go
+/bin/
+/pkg/
+/*.exe
+/*.exe~
+/*.dll
+/*.so
+/*.dylib
+vendor/
+
+# Go build files
+*.test
+*.out
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnpm-store/
+
+# Logs
+logs/
+*.log
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Coverage
+coverage/
+coverage.*
+
+# Temporary
+tmp/
+temp/
+
+# Generated directories
+dist/
+build/
+
+# Misc
+*.pem
+*.key
+
