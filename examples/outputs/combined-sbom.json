@@ -1,0 +1,19 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "components": [
+    {
+      "type": "library",
+      "group": "com.fasterxml.jackson.core",
+      "name": "jackson-databind",
+      "version": "2.13.5",
+      "purl": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.13.5"
+    },
+    {
+      "type": "library",
+      "name": "axios",
+      "version": "1.5.0",
+      "purl": "pkg:npm/axios@1.5.0"
+    }
+  ]
+}

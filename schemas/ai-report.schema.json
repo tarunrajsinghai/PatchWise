@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchWise AI report",
+  "type": "object",
+  "required": [
+    "summary",
+    "recommendations"
+  ],
+  "properties": {
+    "summary": {
+      "type": "object"
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "package",
+          "classification",
+          "reason",
+          "recommendedAction",
+          "evidenceRefs"
+        ],
+        "properties": {
+          "classification": {
+            "type": "string",
+            "enum": [
+              "safe-to-upgrade",
+              "needs-testing",
+              "breaking",
+              "blocked-by-pin",
+              "blocked-by-resolution",
+              "blocked-by-policy",
+              "build-failed",
+              "test-failed",
+              "needs-human-review"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

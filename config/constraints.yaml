@@ -1,0 +1,30 @@
+version: 1
+
+pins:
+  - package: "com.typesafe.akka:akka-actor-typed_2.13"
+    version: "2.6.20"
+    reason: "Pinned until licensing/runtime strategy is approved."
+    owner: "platform-team"
+
+allowedRanges:
+  - package: "org.apache.kafka:kafka-clients"
+    range: ">=3.4.0 <4.0.0"
+    reason: "Kafka 4.x migration not yet approved."
+
+upgradeTogether:
+  - name: "jackson-family"
+    packages:
+      - "com.fasterxml.jackson.core:jackson-core"
+      - "com.fasterxml.jackson.core:jackson-databind"
+      - "com.fasterxml.jackson.core:jackson-annotations"
+    reason: "Jackson modules must stay aligned."
+
+requiredTests:
+  - package: "com.fasterxml.jackson.core:jackson-databind"
+    tests:
+      - "sbt -batch testOnly *Json*"
+    reason: "Serialization/deserialization risk."
+
+manualReview:
+  - package: "com.example:internal-lib_2.13"
+    reason: "No public changelog; always route to a human."

@@ -1,0 +1,23 @@
+{
+  "Results": [
+    {
+      "Target": "combined-sbom.json",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-1111",
+          "PkgName": "com.fasterxml.jackson.core:jackson-databind",
+          "InstalledVersion": "2.13.5",
+          "FixedVersion": "2.15.4",
+          "Severity": "HIGH"
+        },
+        {
+          "VulnerabilityID": "CVE-2024-2222",
+          "PkgName": "axios",
+          "InstalledVersion": "1.5.0",
+          "FixedVersion": "1.6.8",
+          "Severity": "HIGH"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PatchWise feasibility report",
+  "type": "object",
+  "required": [
+    "runId",
+    "summary",
+    "results"
+  ],
+  "properties": {
+    "runId": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "results": {
+      "type": "array"
+    }
+  }
+}

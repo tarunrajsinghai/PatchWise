@@ -1,0 +1,17 @@
+[project]
+name = "patchwise"
+version = "0.1.0"
+description = "Evidence-based CVE upgrade advisor"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "jsonschema>=4.22",
+  "requests>=2.32"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+
+[tool.ruff]
+line-length = 100
